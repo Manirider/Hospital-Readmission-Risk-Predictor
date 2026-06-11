@@ -1,0 +1,88 @@
+version: "3.9"
+
+services:
+  # ─── JupyterLab for exploration and development ────────────────────────
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: readmission-jupyter
+    ports:
+      - "${JUPYTER_PORT:-8888}:8888"
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./notebooks:/app/notebooks
+      - ./src:/app/src
+      - ./pipeline.pkl:/app/pipeline.pkl
+    env_file:
+      - .env.example
+    environment:
+      - RANDOM_SEED=${RANDOM_SEED:-42}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+    restart: unless-stopped
+
+  # ─── Training pipeline ────────────────────────────────────────────────
+  train:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: readmission-train
+    command: >
+      python -c "
+      from src.data_loader import load_and_prepare
+      from src.leakage_detection import remove_leakage_rows, audit_leakage, generate_leakage_report
+      from src.feature_engineering import engineer_features
+      from src.train import run_training
+      from src.evaluate import evaluate_model
+      from src.calibrate import compare_calibration_methods, plot_calibration_curve
+      from src.threshold_optimizer import find_optimal_threshold, plot_threshold_analysis, document_threshold_rationale
+      from src.utils import save_pipeline, set_seed
+      import numpy as np
+
+      set_seed()
+      df = load_and_prepare()
+      audit = audit_leakage(df)
+      generate_leakage_report(audit)
+      df = remove_leakage_rows(df)
+      df = engineer_features(df)
+      result = run_training(df)
+
+      # Evaluate
+      eval_result = evaluate_model(result['best_pipeline'], result['X_test'], result['y_test'])
+
+      # Calibrate
+      best_method, cal_model = compare_calibration_methods(
+          result['best_pipeline'], result['X_train'], result['y_train'],
+          result['X_test'], result['y_test'])
+      y_prob_uncal = result['best_pipeline'].predict_proba(result['X_test'])[:, 1]
+      y_prob_cal = cal_model.predict_proba(result['X_test'])[:, 1]
+      plot_calibration_curve(result['y_test'].values, y_prob_uncal, y_prob_cal)
+
+      # Threshold
+      threshold_result = find_optimal_threshold(result['y_test'].values, y_prob_cal)
+      plot_threshold_analysis(result['y_test'].values, y_prob_cal, threshold_result['threshold'])
+      document_threshold_rationale(threshold_result)
+
+      save_pipeline(cal_model)
+      print('Training pipeline complete ✓')
+      "
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+      - ./pipeline.pkl:/app/pipeline.pkl
+    env_file:
+      - .env.example
+
+  # ─── Test suite ────────────────────────────────────────────────────────
+  test:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: readmission-test
+    command: python -m pytest tests/ -v --tb=short
+    volumes:
+      - ./data:/app/data
+      - ./outputs:/app/outputs
+    env_file:
+      - .env.example
