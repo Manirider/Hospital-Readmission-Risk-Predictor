@@ -1,0 +1,8 @@
+Repository: Hospital-Readmission-Risk-Predictor
+Description: End-to-End Healthcare AI System for Predicting 30-Day Hospital Readmission Risk using Scikit-Learn, SHAP, Model Calibration, and Fairness Auditing.
+Topics: portfolio-project
+
+GitHub Settings Updates:
+1. Go to https://github.com/Manirider/Hospital-Readmission-Risk-Predictor/settings
+2. Update the Description field to: End-to-End Healthcare AI System for Predicting 30-Day Hospital Readmission Risk using Scikit-Learn, SHAP, Model Calibration, and Fairness Auditing.
+3. Add the following tags under Topics: portfolio-project
